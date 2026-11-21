@@ -42,8 +42,8 @@
 The application is pre-configured with the provided Supabase project credentials in `.env` and `.env.example`:
 
 ```env
-VITE_SUPABASE_URL=https://yqjrwihetwbdpxrvxnqe.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_luC2H_eJFBsWm1x9FeXCXw_uK1I9YSM
+VITE_SUPABASE_URL=https://appuser.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_key_id
 ```
 
 ### Applying Database Schema (`schema.sql`)
