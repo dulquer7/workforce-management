@@ -1,0 +1,316 @@
+================================================================================
+SEMILWORK — SMART WORKFORCE & EMPLOYEE SUPPORT MANAGEMENT SYSTEM
+COMPLETE PROJECT DOCUMENTATION & ARCHITECTURAL SPECIFICATION
+================================================================================
+
+TABLE OF CONTENTS:
+1. PROBLEM STATEMENT & MOTIVATION
+2. SYSTEM ARCHITECTURE & DATA FLOW
+3. TECHNOLOGY STACK SPECIFICATION
+4. STEP-BY-STEP DEVELOPMENT PROCESS
+5. DATABASE SCHEMA & RELATIONAL MODEL
+6. MODULE BREAKDOWN & FEATURES
+7. SETUP, EXECUTION & DEPLOYMENT GUIDE
+
+================================================================================
+1. PROBLEM STATEMENT & MOTIVATION
+================================================================================
+
+1.1 Modern Workplace Fragmentation:
+In modern enterprise environments, human resource management and employee support
+systems are often fragmented across multiple disparate software solutions:
+- Attendance tracking is frequently handled via third-party biometric software or 
+  isolated check-in portals with no immediate employee feedback.
+- Leave management is commonly managed through detached spreadsheet forms or email 
+  threads, leading to delayed approvals, lost communication, and opaque balances.
+- Internal service and support (IT hardware, payroll discrepancies, HR policy 
+  inquiries, office facilities) is either handled via informal chats or complex 
+  external helpdesks not linked to the employee's internal profile.
+- Organizational hierarchies and reporting lines are often disconnected from daily 
+  operational workflows, making it difficult for HR leaders to reassign 
+  supervisors and oversee departmental presence.
+
+1.2 The SemilWork Solution:
+SemilWork was designed and engineered as an all-in-one, enterprise-grade 
+workforce operations and internal ITSM (Information Technology Service Management) 
+platform. It unifies:
+1. Real-time Attendance Tracking with live running stopwatch shift counters.
+2. End-to-end Leave Management with transparent manager review workflows.
+3. Multi-departmental ITSM Internal Support Desk with 3-phase transparent timelines.
+4. Dynamic Employee Directory with dynamic reporting manager assignment (manager_id).
+5. Role-based experience routing between Employees and HR / Operations Managers.
+
+================================================================================
+2. SYSTEM ARCHITECTURE & DATA FLOW
+================================================================================
+
+2.1 High-Level Architecture:
+SemilWork follows a decoupled client-server architecture powered by a modern 
+Single Page Application (SPA) frontend communicating directly with Supabase 
+(PostgreSQL Engine + GoTrue Auth microservice) over secure REST APIs.
+
+[ Client Layer: React + Vite + Tailwind CSS ]
+                      │
+                      ▼
+[ Data & State Layer: AuthContext + DataContext + ToastContext ]
+                      │
+                      ▼
+[ API & Client Gateway: @supabase/supabase-js (SSL HTTPS/WSS) ]
+                      │
+      ┌───────────────┴───────────────┐
+      ▼                               ▼
+[ Supabase GoTrue Auth ]     [ Supabase PostgreSQL 15+ ]
+(JWT Sessions, Users)        - public.profiles
+                             - public.attendance
+                             - public.leave_requests
+                             - public.support_tickets
+
+2.2 Identity & Role Synchronization:
+- Every registered user exists in Supabase Auth (auth.users).
+- When a user signs up, a corresponding record is atomically created in 
+  public.profiles with the exact same UUID (id: data.user.id).
+- The profile contains the authoritative role ('employee' or 'manager'), 
+  department, designation, contact info, leave quota, and manager_id.
+- On login, the user's JWT token determines their session, and the system 
+  automatically configures permissions and dashboard interfaces.
+
+2.3 Reporting Line Hierarchy (Self-Referential manager_id):
+- The profiles table implements a self-referential foreign key:
+  manager_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+- This enables employees to be assigned to a specific manager.
+- HR/Managers can view "All Employees" or filter down to "My Assigned Team", 
+  enabling focused delegation of shift monitoring and leave approval duties.
+
+================================================================================
+3. TECHNOLOGY STACK SPECIFICATION
+================================================================================
+
+3.1 Frontend Tier:
+- Language: TypeScript 5.0+ (Strict type-checking, explicit data models)
+- Framework: React 18+ (Functional components, custom hooks, React.memo/useMemo)
+- Build Tool / Bundler: Vite 8 (Ultra-fast Hot Module Replacement, optimized Rollup bundling)
+- Styling Engine: Tailwind CSS 3.4 (Slate/Indigo enterprise theme, utility-first CSS)
+- Iconography: Lucide React (Enterprise SVG icons)
+- Micro-interactions: Canvas Confetti (Celebratory feedback upon approvals & ticket resolutions)
+- Typography: Plus Jakarta Sans (Google Fonts)
+
+3.2 Backend & Database Tier (BaaS):
+- Database Engine: PostgreSQL 15+ hosted on Supabase Cloud
+- Authentication Engine: Supabase GoTrue (Password hashing, JWT token lifecycle)
+- Client Driver: @supabase/supabase-js v2
+- Extensions: uuid-ossp (gen_random_uuid() generation)
+- Realtime Capabilities: Event-driven PostgreSQL change notifications
+
+================================================================================
+4. STEP-BY-STEP DEVELOPMENT PROCESS
+================================================================================
+
+STEP 1: PROJECT INITIALIZATION & CONFIGURATION
+- Initialized a blank Vite workspace with React and TypeScript template.
+- Installed production dependencies: @supabase/supabase-js, lucide-react, canvas-confetti.
+- Installed dev dependencies: tailwindcss, postcss, autoprefixer, @types/canvas-confetti.
+- Generated and customized tailwind.config.js with the custom Indigo/Slate palette.
+- Configured tsconfig.json with ESNext module resolution, bundler mode, and react-jsx.
+
+STEP 2: DATABASE RELATIONAL MODELING & PERMISSIONS
+- Engineered schema.sql with complete DDL declarations for all 4 tables:
+  * profiles (id UUID PK, email, full_name, role, department, designation, phone, status, leave_balance, manager_id)
+  * attendance (id UUID PK, user_id FK, date DATE, clock_in, clock_out, work_duration_minutes, status, location, notes)
+  * leave_requests (id UUID PK, user_id FK, leave_type, start_date, end_date, days, reason, status, manager_comment, reviewed_by FK)
+  * support_tickets (id UUID PK, ticket_number, user_id FK, category, priority, subject, description, status, assigned_to FK, resolution_notes)
+- Created composite unique constraints (user_id, date) on attendance to prevent accidental duplicate clock-ins for the same day.
+- Configured table-level grants:
+  GRANT ALL ON TABLE profiles, attendance, leave_requests, support_tickets TO anon, authenticated, service_role;
+
+STEP 3: TYPESCRIPT DOMAIN INTERFACES
+- Defined strict interfaces in src/types.ts:
+  Profile, AttendanceRecord, LeaveRequest, SupportTicket, ActivityItem, UserRole, 
+  LeaveType, LeaveStatus, TicketCategory, TicketPriority, TicketStatus.
+
+STEP 4: STATE MANAGEMENT ARCHITECTURE
+- ToastContext (src/context/ToastContext.tsx):
+  Toast dispatching system with automatic timer dismiss, custom progress, 
+  and color-coded feedback (Success, Warning, Error, Info).
+- AuthContext (src/context/AuthContext.tsx):
+  Supabase GoTrue wrapper managing sessions, automatic profile fetching, 
+  signUp with 1:1 UUID mapping, signInWithPassword, signOut, and session persistence 
+  via supabase.auth.onAuthStateChange.
+- DataContext (src/context/DataContext.tsx):
+  Unified data layer interacting with live Supabase PostgreSQL tables.
+  Exposes reactive data arrays, live shift stopwatch counter, clockIn/clockOut 
+  methods, leave application and approval logic, ticket creation/resolution, 
+  and HR employee assignment methods.
+
+STEP 5: UI & LAYOUT REFACTORING
+- Navbar (src/components/layout/Navbar.tsx):
+  Clean enterprise top bar showing current page title, live running shift indicator, 
+  logged-in user's name and role badge, and clean Logout button.
+- Sidebar (src/components/layout/Sidebar.tsx):
+  Slate-950/Indigo SaaS sidebar featuring intuitive icons, pending approval badges, 
+  open ticket counter badges, and responsive drawer support for mobile devices.
+
+STEP 6: AUTHENTICATION GATEWAY
+- AuthPage (src/pages/AuthPage.tsx):
+  Full-screen dual-tab Sign In / Sign Up gateway.
+  Captures Full Name, Work Email, Password, Role (Employee vs. HR/Manager), 
+  Department, Designation, and Phone. Automatically inserts into profiles on registration.
+
+STEP 7: EXECUTIVE DASHBOARD & LIVE FEED
+- Dashboard (src/pages/Dashboard.tsx):
+  Features 4 real-time KPI cards, hero shift status banner with running stopwatch, 
+  assigned reporting manager indicator for employees, and unified activity feed 
+  combining leaves and tickets in reverse-chronological order.
+
+STEP 8: ATTENDANCE TRACKER MODULE
+- AttendanceTracker (src/pages/AttendanceTracker.tsx):
+  Interactive 1-click Clock In / Clock Out button logging exact ISO timestamps, 
+  location selector, shift notes, and personal attendance history.
+  Manager view features company-wide daily shift monitor with department filters.
+
+STEP 9: LEAVE MANAGEMENT & APPROVAL SYSTEM
+- LeaveManagement (src/pages/LeaveManagement.tsx):
+  Leave entitlement pool cards, application modal with date range calculation, 
+  status tracking table, and manager 1-click Approve/Reject console with directive feedback.
+
+STEP 10: ITSM INTERNAL SUPPORT DESK
+- SupportDesk (src/pages/SupportDesk.tsx):
+  Ticket creation across IT, Payroll, HR, and Facilities.
+  Transparent 3-stage lifecycle timeline (Open -> In Progress -> Resolved).
+  Multi-factor search/filtering and manager resolution notes recording.
+
+STEP 11: HR TEAM & ASSIGNMENTS CONSOLE
+- EmployeeDirectory (src/pages/EmployeeDirectory.tsx):
+  Roster of all registered employees with live presence badges.
+  HR reporting line management: "Assign to Me" 1-click button, manager selector 
+  dropdown, and "My Assigned Team" filter toggle.
+  Employee profile editing for status and leave balance adjustments.
+
+STEP 12: VERSION CONTROL & DEPLOYMENT
+- Created comprehensive .gitignore for node_modules, build artifacts, and secrets.
+- Initialized local Git repository, committed all files, and pushed cleanly to:
+  https://github.com/dulquer7/workforce-management
+
+================================================================================
+5. DATABASE SCHEMA & RELATIONAL MODEL
+================================================================================
+
+TABLE: public.profiles
+- id             : UUID PRIMARY KEY (Matches auth.users.id)
+- email          : TEXT UNIQUE NOT NULL
+- full_name      : TEXT NOT NULL
+- role           : TEXT NOT NULL CHECK (role IN ('employee', 'manager'))
+- department     : TEXT NOT NULL
+- designation    : TEXT NOT NULL
+- phone          : TEXT
+- avatar_url     : TEXT
+- status         : TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'On Leave', 'Remote'))
+- leave_balance  : INTEGER DEFAULT 18
+- manager_id     : UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+- created_at     : TIMESTAMPTZ DEFAULT now()
+
+TABLE: public.attendance
+- id                    : UUID PRIMARY KEY DEFAULT gen_random_uuid()
+- user_id               : UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE
+- date                  : DATE NOT NULL DEFAULT CURRENT_DATE
+- clock_in              : TIMESTAMPTZ
+- clock_out             : TIMESTAMPTZ
+- work_duration_minutes : INTEGER DEFAULT 0
+- status                : TEXT DEFAULT 'Present' CHECK (status IN ('Present', 'Half Day', 'Overtime', 'Absent', 'Remote'))
+- location              : TEXT DEFAULT 'Bengaluru HQ'
+- notes                 : TEXT
+- created_at            : TIMESTAMPTZ DEFAULT now()
+- CONSTRAINT unique_user_daily_attendance UNIQUE (user_id, date)
+
+TABLE: public.leave_requests
+- id              : UUID PRIMARY KEY DEFAULT gen_random_uuid()
+- user_id         : UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE
+- leave_type      : TEXT NOT NULL CHECK (leave_type IN ('Annual Leave', 'Sick Leave', 'Casual Leave', 'Maternity / Paternity', 'Unpaid Leave'))
+- start_date      : DATE NOT NULL
+- end_date        : DATE NOT NULL
+- days            : INTEGER NOT NULL DEFAULT 1
+- reason          : TEXT NOT NULL
+- status          : TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected'))
+- manager_comment : TEXT
+- applied_at      : TIMESTAMPTZ DEFAULT now()
+- reviewed_at     : TIMESTAMPTZ
+- reviewed_by     : UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+
+TABLE: public.support_tickets
+- id               : UUID PRIMARY KEY DEFAULT gen_random_uuid()
+- ticket_number    : TEXT UNIQUE NOT NULL
+- user_id          : UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE
+- category         : TEXT NOT NULL CHECK (category IN ('IT Support', 'Payroll', 'HR Policy', 'Facilities'))
+- priority         : TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High'))
+- subject          : TEXT NOT NULL
+- description      : TEXT NOT NULL
+- status           : TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'In Progress', 'Resolved'))
+- assigned_to      : UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+- resolution_notes : TEXT
+- created_at       : TIMESTAMPTZ DEFAULT now()
+- updated_at       : TIMESTAMPTZ DEFAULT now()
+
+================================================================================
+6. MODULE BREAKDOWN & USER EXPERIENCES
+================================================================================
+
+6.1 Employee Experience:
+- Dashboard: View available leave quota, active shift duration, open tickets, and 
+  name of their assigned reporting manager.
+- Attendance: Click "Clock In" when beginning work to record the exact start time 
+  and activate a live second-by-second shift timer. Click "Clock Out" to log the 
+  total minutes and duration.
+- Leave Management: Fill out a quick form selecting leave dates and reasons. View 
+  the approval status and any feedback notes written by the manager.
+- Support Desk: Submit tickets for hardware issues, tax calculations, or facility 
+  requests, and watch the status progress from Open to Resolved.
+
+6.2 HR / Manager Experience:
+- Executive Dashboard: High-level overview of company presence and ticket queues.
+- Company Attendance Monitor: Real-time table displaying which employees are currently 
+  clocked in at the office, working remotely, or completed their shifts today.
+- Leave Approvals Queue: 1-click Approve or Reject buttons with feedback directives. 
+  Approved leaves automatically deduct days from the employee's balance.
+- ITSM Incident Desk: Filter tickets by High/Medium/Low priority, assign to technicians, 
+  and add official resolution notes.
+- Team & Assignments: View all staff, assign employees to report to yourself or other 
+  managers, and update presence status or leave balances.
+
+================================================================================
+7. SETUP, EXECUTION & DEPLOYMENT GUIDE
+================================================================================
+
+7.1 Prerequisites:
+- Node.js version 18.0 or higher
+- npm version 9.0 or higher
+- A Supabase account and project
+
+7.2 Environment Setup:
+1. Ensure .env exists in the project root with your Supabase credentials:
+   VITE_SUPABASE_URL=https://yqjrwihetwbdpxrvxnqe.supabase.co
+   VITE_SUPABASE_ANON_KEY=sb_publishable_luC2H_eJFBsWm1x9FeXCXw_uK1I9YSM
+
+7.3 Applying Schema & Grants in Supabase:
+1. Open your Supabase Dashboard > SQL Editor.
+2. Run schema.sql located in the project root.
+3. Verify that table permissions are granted:
+   GRANT ALL ON TABLE profiles, attendance, leave_requests, support_tickets TO anon, authenticated, service_role;
+   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+7.4 Local Execution Commands:
+- Install dependencies:
+  npm install
+
+- Run local development server:
+  npm run dev
+  (Server starts on http://localhost:5173/)
+
+- Compile and build for production:
+  npm run build
+
+7.5 Remote Repository:
+GitHub: https://github.com/dulquer7/workforce-management
+Branch: main
+
+================================================================================
+END OF SPECIFICATION & DOCUMENTATION
+================================================================================
